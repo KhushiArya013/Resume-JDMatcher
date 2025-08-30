@@ -22,7 +22,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "http://localhost:5174",
+        "http://127.0.0.1:5174",
         "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
@@ -64,6 +64,14 @@ class MatchResult(BaseModel):
     match_percentage: float
     verdict: str
     analysis: str
+
+# Add a Pydantic model for the request body for the new endpoint
+class RefineJDRequest(BaseModel):
+    job_description: str
+
+# Add a Pydantic model for the request body for the generate cover letter endpoint
+class GenerateCoverLetterRequest(BaseModel):
+    job_description: str
 
 @app.get("/")
 def health():
@@ -130,6 +138,109 @@ async def match_resume_with_llm(
 
         return response_data
 
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
+
+@app.post("/refine-jd")
+async def refine_jd(request: RefineJDRequest):
+    """
+    Refines a given job description using an LLM.
+    """
+    try:
+        if not request.job_description:
+            raise HTTPException(status_code=400, detail="Job description is empty.")
+
+        refine_prompt = PromptTemplate.from_template("""
+        You are a professional job description rewriter.
+        Your task is to take a raw job description and refine it to be more clear, concise, and professional.
+        Focus on improving readability, adding key responsibilities, and ensuring a strong and engaging tone.
+        Return the refined job description as plain text.
+
+        Raw Job Description:
+        {job_description}
+
+        Refined Job Description:
+        """)
+
+        llm_refine_chain = refine_prompt | llm
+        
+        llm_response = await llm_refine_chain.ainvoke({"job_description": request.job_description})
+        
+        return {"refined_jd": llm_response.content}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
+
+@app.post("/generate-cover-letter")
+async def generate_cover_letter(request: GenerateCoverLetterRequest):
+    """
+    Generates a cover letter based on a job description using an LLM.
+    """
+    try:
+        if not request.job_description:
+            raise HTTPException(status_code=400, detail="Job description is empty.")
+
+        cover_letter_prompt = PromptTemplate.from_template("""
+        You are a professional cover letter writer.
+        Your task is to take a job description and generate a professional, persuasive cover letter.
+        Make sure the cover letter is well-structured and focuses on highlighting how the candidate's skills would benefit the company.
+        Return the generated cover letter as plain text.
+
+        Job Description:
+        {job_description}
+
+        Generated Cover Letter:
+        """)
+
+        llm_cover_letter_chain = cover_letter_prompt | llm
+        
+        llm_response = await llm_cover_letter_chain.ainvoke({"job_description": request.job_description})
+        
+        return {"cover_letter": llm_response.content}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
+
+@app.post("/improve-resume")
+async def improve_resume(
+    resume: UploadFile = File(...),
+    job_description: str = Form(...),
+):
+    """
+    Analyzes a resume against a job description and suggests improvements using an LLM.
+    """
+    try:
+        if not resume.filename or not job_description:
+            raise HTTPException(status_code=400, detail="Resume file and job description are required.")
+
+        file_bytes = await resume.read()
+        resume_text = await extract_text_from_pdf(file_bytes)
+        
+        improve_prompt = PromptTemplate.from_template("""
+        You are a professional resume improvement assistant.
+        Your task is to analyze a candidate's resume and a job description to provide actionable recommendations for improvement.
+        Focus on the following areas:
+        1.  **Missing Keywords:** Identify important keywords from the job description that are not present in the resume.
+        2.  **Weak Bullet Points:** Suggest specific ways to rephrase or quantify achievements in the resume's experience section to better align with the job description.
+        3.  **Overall Summary:** Provide a concise summary of the key changes needed to make the resume more compatible with the job.
+
+        Resume:
+        {resume_text}
+
+        Job Description:
+        {job_description}
+
+        Provide your analysis in a clear, easy-to-read format.
+        """)
+
+        llm_improve_chain = improve_prompt | llm
+        
+        llm_response = await llm_improve_chain.ainvoke({"resume_text": resume_text, "job_description": job_description})
+        
+        return {"analysis": llm_response.content}
+        
     except HTTPException:
         raise
     except Exception as e:

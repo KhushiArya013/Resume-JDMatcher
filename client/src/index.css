@@ -1,19 +1,54 @@
+/*==================================================
+  Global and Layout Styles
+==================================================*/
+
+:root {
+  /* Define custom properties for colors and fonts for better maintainability */
+  --color-primary: #a052ff; /* Change: A brighter, more visible purple */
+  --color-accent: #fcd34d;
+  --color-text-primary: #e2e8f0;
+  --color-text-secondary: #a0aec0;
+  --color-bg-overlay: rgba(0, 0, 0, 0.6);
+  --color-bg-card: rgba(255, 255, 255, 0.08);
+  --color-border-card: rgba(255, 255, 255, 0.2);
+  --font-heading: 'Poppins', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  color: #fff;
-
-  /* Background image */
+  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  color: var(--color-text-primary);
   background: url("https://images.unsplash.com/photo-1508780709619-79562169bc64?auto=format&fit=crop&w=1920&q=80")
     no-repeat center center fixed;
   background-size: cover;
-
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
+}
+
+/* Adds a preloader animation for a smoother loading experience */
+.preloader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg-overlay);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 1;
+  transition: opacity 0.5s ease-in-out;
+}
+
+.preloader.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 body::before {
@@ -23,8 +58,8 @@ body::before {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.45); /* darker overlay */
-  backdrop-filter: blur(4px);
+  background: var(--color-bg-overlay);
+  backdrop-filter: blur(8px); /* Increased blur */
   z-index: 0;
 }
 
@@ -37,124 +72,158 @@ body::before {
   align-items: center;
 }
 
-/* 🔥 Card effect for your form/text */
+/*==================================================
+  Component-Specific Styles
+==================================================*/
+
 .container {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 2rem 3rem;
-  max-width: 500px;
+  background: var(--color-bg-card);
+  border-radius: 20px; /* Slightly larger border-radius */
+  padding: 3rem; /* Increased padding */
+  max-width: 550px; /* Slightly wider */
   width: 90%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
-
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-
-  border: 1px solid rgba(255, 255, 255, 0.2);
-
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); /* More pronounced shadow */
+  backdrop-filter: blur(16px); /* Increased blur */
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-border-card);
   text-align: center;
-  color: #fff;
 }
 
-/* Heading style */
 h1 {
-  font-size: 2.2em;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  font-family: var(--font-heading);
+  font-size: 2.5em; /* Larger heading */
+  font-weight: 800; /* Bolder */
+  margin-bottom: 1.5rem;
+  text-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
 }
 
-/* Form and input styling */
 .space-y-6 > * + * {
-  margin-top: 1.5rem;
+  margin-top: 1.75rem; /* Increased spacing */
 }
 
 label {
-  font-weight: 500;
-  color: #e2e8f0;
+  font-weight: 600; /* Bolder label text */
+  color: var(--color-text-primary);
 }
 
 input[type="file"],
 textarea {
   width: 100%;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background-color: rgba(26, 26, 26, 0.6);
-  color: #fff;
+  padding: 1rem; /* Increased padding */
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border-card);
+  background-color: var(--color-bg-overlay);
+  color: var(--color-text-primary);
   transition: all 0.3s ease;
 }
 
 input[type="file"]:hover,
 textarea:hover {
-  border-color: #6366f1; /* Tailwind's indigo-500 */
+  border-color: var(--color-accent);
 }
 
 textarea:focus {
   outline: none;
-  border-color: #6366f1; /* Tailwind's indigo-500 */
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(224, 213, 234, 0.4);
 }
 
 /* Button styling */
-button {
+button,
+.button-link {
+  display: inline-block;
   width: 100%;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 1em;
-  font-weight: 600;
-  background-color: #4f46e5; /* Tailwind's indigo-600 */
+  padding: 1rem;
+  margin-top: 1rem;
+  border-radius: 0.75rem;
+  font-size: 1.1em;
+  font-weight: 700;
+  background-color: var(--color-primary);
   color: #fff;
   border: none;
   cursor: pointer;
   transition: all 0.3s ease-in-out;
+  text-decoration: none;
 }
 
-button:hover {
-  background-color: #4338ca; /* Tailwind's indigo-700 */
-  transform: translateY(-2px);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+button:hover,
+.button-link:hover {
+  background-color: #bcbebf; /* Change: Slightly darker purple on hover */
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
 }
 
 button:disabled {
-  background-color: #a5b4fc; /* Tailwind's indigo-400 */
+  /* Change: Semi-transparent version of the light purple for better contrast */
+  background-color: rgba(231, 225, 239, 0.4); 
+  border: 1px solid rgba(255, 255, 255, 0.2); /* Added border for better definition */
+  color: var(--color-text-secondary); /* Ensure text is visible */
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
+}
+
+.secondary-button {
+  background-color: transparent;
+  border: 1px solid var(--color-text-secondary);
+  color: var(--color-text-secondary);
+}
+
+.secondary-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--color-text-primary);
+  color: var(--color-text-primary);
 }
 
 /* Result box styling */
 .result-box {
-  margin-top: 1.5rem;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--color-bg-card);
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border-card);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   text-align: left;
-  color: #fff;
 }
 
 .result-box h2 {
-  font-size: 1.1em;
+  font-size: 1.2em;
   font-weight: 700;
-  margin-bottom: 0.5rem;
-  color: #a5b4fc; /* Tailwind's indigo-300 */
+  margin-bottom: 1rem;
+  color: var(--color-accent);
 }
 
 .result-box p {
   margin: 0;
-  font-size: 0.9em;
-  line-height: 1.5;
-  color: #e2e8f0;
+  font-size: 1em;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
 }
 
 .result-box strong {
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 .result-box .text-red-300 {
-  color: #fca5a5; /* Tailwind's red-300 */
+  color: #fca5a5;
 }
 
 .result-box .whitespace-pre-wrap {
   white-space: pre-wrap;
 }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.8s ease-in-out forwards;
+}
+
+/* Fonts (requires importing in index.html) */
+/*
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+*/
