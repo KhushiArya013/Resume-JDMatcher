@@ -1,0 +1,160 @@
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  color: #fff;
+
+  /* Background image */
+  background: url("https://images.unsplash.com/photo-1508780709619-79562169bc64?auto=format&fit=crop&w=1920&q=80")
+    no-repeat center center fixed;
+  background-size: cover;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.45); /* darker overlay */
+  backdrop-filter: blur(4px);
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 🔥 Card effect for your form/text */
+.container {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 2rem 3rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+
+  border: 1px solid rgba(255, 255, 255, 0.2);
+
+  text-align: center;
+  color: #fff;
+}
+
+/* Heading style */
+h1 {
+  font-size: 2.2em;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Form and input styling */
+.space-y-6 > * + * {
+  margin-top: 1.5rem;
+}
+
+label {
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+input[type="file"],
+textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background-color: rgba(26, 26, 26, 0.6);
+  color: #fff;
+  transition: all 0.3s ease;
+}
+
+input[type="file"]:hover,
+textarea:hover {
+  border-color: #6366f1; /* Tailwind's indigo-500 */
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #6366f1; /* Tailwind's indigo-500 */
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
+}
+
+/* Button styling */
+button {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 1em;
+  font-weight: 600;
+  background-color: #4f46e5; /* Tailwind's indigo-600 */
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease-in-out;
+}
+
+button:hover {
+  background-color: #4338ca; /* Tailwind's indigo-700 */
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+button:disabled {
+  background-color: #a5b4fc; /* Tailwind's indigo-400 */
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Result box styling */
+.result-box {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: left;
+  color: #fff;
+}
+
+.result-box h2 {
+  font-size: 1.1em;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: #a5b4fc; /* Tailwind's indigo-300 */
+}
+
+.result-box p {
+  margin: 0;
+  font-size: 0.9em;
+  line-height: 1.5;
+  color: #e2e8f0;
+}
+
+.result-box strong {
+  font-weight: 600;
+}
+
+.result-box .text-red-300 {
+  color: #fca5a5; /* Tailwind's red-300 */
+}
+
+.result-box .whitespace-pre-wrap {
+  white-space: pre-wrap;
+}
