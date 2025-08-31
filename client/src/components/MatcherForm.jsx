@@ -1,8 +1,9 @@
 // src/components/MatcherForm.jsx
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { gsap } from "gsap";
 
 // Step 1: File Upload Component
 const FileUploadStep = ({ onFileSelect }) => (
@@ -62,39 +63,76 @@ const JobDescriptionStep = ({ jobDescription, onDescriptionChange, onSubmit, loa
   </motion.form>
 );
 
-// Step 3: Result Display Component
-const ResultDisplay = ({ result, error }) => (
-  <motion.div
-    key="result-display"
-    initial={{ opacity: 0, y: 50 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.5 }}
-    className="mt-6 p-4 bg-white/10 backdrop-blur-md rounded-lg shadow-md text-white text-left"
-  >
-    <h2 className="text-lg font-bold mb-2 text-indigo-300">Match Result:</h2>
-    {error ? (
-      <p className="text-red-300">Error: {error}</p>
-    ) : (
-      <div>
-        <p>
-          <strong className="text-white">Match Percentage:</strong>{" "}
-          <span className="font-semibold">{result.match_percentage}%</span>
-        </p>
-        <p>
-          <strong className="text-white">Verdict:</strong>{" "}
-          <span>{result.verdict}</span>
-        </p>
-        <div className="mt-4">
-          <h3 className="text-md font-bold text-indigo-300">LLM Analysis:</h3>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-200">
-            {result.analysis}
-          </p>
-        </div>
-      </div>
-    )}
-  </motion.div>
-);
+// Step 3: Result Display Component with GSAP Animations
+const ResultDisplay = ({ result, error }) => {
+  const percentageRef = useRef(null);
+  const verdictRef = useRef(null);
+  const progressBarRef = useRef(null);
 
+  useEffect(() => {
+    if (result) {
+      // Animate match percentage
+      if (percentageRef.current) {
+        gsap.fromTo(
+          percentageRef.current,
+          { innerText: 0 },
+          { innerText: result.match_percentage, duration: 1.5, ease: "power1.out", snap: { innerText: 1 } }
+        );
+      }
+
+      // Fade-in verdict
+      if (verdictRef.current) {
+        gsap.fromTo(verdictRef.current, { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 1 });
+      }
+
+      // Animate progress bar width
+      if (progressBarRef.current) {
+        gsap.fromTo(progressBarRef.current, { width: "0%" }, { width: `${result.match_percentage}%`, duration: 1.5, ease: "power1.out" });
+      }
+    }
+  }, [result]);
+
+  return (
+    <motion.div
+      key="result-display"
+      initial={{ opacity: 0, y: 50 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="mt-6 p-4 bg-white/10 backdrop-blur-md rounded-lg shadow-md text-white text-left"
+    >
+      <h2 className="text-lg font-bold mb-2 text-indigo-300">Match Result:</h2>
+      {error ? (
+        <p className="text-red-300">Error: {error}</p>
+      ) : (
+        <div>
+          <p className="mb-2">
+            <strong className="text-white">Match Percentage:</strong>{" "}
+            <span ref={percentageRef} className="font-semibold">{result.match_percentage}%</span>
+          </p>
+
+          {/* Progress bar */}
+          <div className="w-full h-3 bg-gray-700 rounded-full mb-4">
+            <div ref={progressBarRef} className="h-full bg-indigo-500 rounded-full"></div>
+          </div>
+
+          <p className="mb-2">
+            <strong className="text-white">Verdict:</strong>{" "}
+            <span ref={verdictRef}>{result.verdict}</span>
+          </p>
+
+          <div className="mt-4">
+            <h3 className="text-md font-bold text-indigo-300">LLM Analysis:</h3>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-200">
+              {result.analysis}
+            </p>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+};
+
+// Main Component
 export default function MatcherForm() {
   const [step, setStep] = useState(1);
   const [resumeFile, setResumeFile] = useState(null);
@@ -129,7 +167,7 @@ export default function MatcherForm() {
 
     setLoading(true);
     try {
-      const response = await axios.post("http://127.0.0.1:8000/match", formData, {
+      const response = await axios.post("https://resume-jdmatcher-latest.onrender.com/match", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setResult(response.data);
@@ -151,9 +189,7 @@ export default function MatcherForm() {
   return (
     <div
       className="min-h-screen flex items-center justify-center bg-cover bg-center"
-      style={{
-        backgroundImage: "url('/bg.jpg')",
-      }}
+      style={{ backgroundImage: "url('/bg.jpg')" }}
     >
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -161,9 +197,9 @@ export default function MatcherForm() {
         className="bg-white/15 backdrop-blur-lg shadow-2xl rounded-2xl p-10 w-full max-w-lg text-center border border-white/30 relative"
       >
         <button>
-        <Link to="/" className="text-gray-300 hover:text-white absolute top-4 left-4">
-          ← Back to Home
-        </Link>
+          <Link to="/" className="text-gray-300 hover:text-white absolute top-4 left-4">
+            ← Back to Home
+          </Link>
         </button>
         <h1 className="text-3xl font-extrabold text-white drop-shadow-lg mb-6">
           Resume & JD Matcher

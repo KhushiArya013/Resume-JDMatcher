@@ -21,10 +21,8 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1:5174",
+        "https://resume-jd-matcher.vercel.app",  # your frontend deployed link
+        "http://localhost:5173",                  # optional for local testing
     ],
     allow_credentials=True,
     allow_methods=["*"],
