@@ -1,5 +1,6 @@
 import io
 import os
+import uvicorn
 import json
 import re
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
@@ -245,3 +246,6 @@ async def improve_resume(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An internal server error occurred: {str(e)}")
+    if __name__ == "__main__":
+        port = int(os.environ.get("PORT", 8000))  # Render sets the PORT automatically
+        uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
