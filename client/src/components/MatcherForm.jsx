@@ -163,7 +163,7 @@ export default function MatcherForm() {
 
     try {
       const response = await axios.post(
-        "https://resume-jdmatcher-latest.onrender.com/match", // fixed endpoint
+        "https://resume-jdmatcher-latest.onrender.com/", // fixed endpoint
         formData,
         { headers: { "Content-Type": "multipart/form-data" } }
       );
