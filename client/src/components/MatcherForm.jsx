@@ -1,4 +1,3 @@
-// src/components/MatcherForm.jsx
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { Link } from "react-router-dom";
@@ -63,7 +62,7 @@ const JobDescriptionStep = ({ jobDescription, onDescriptionChange, onSubmit, loa
   </motion.form>
 );
 
-// Step 3: Result Display Component with GSAP Animations
+// Step 3: Result Display Component
 const ResultDisplay = ({ result, error }) => {
   const percentageRef = useRef(null);
   const verdictRef = useRef(null);
@@ -71,7 +70,6 @@ const ResultDisplay = ({ result, error }) => {
 
   useEffect(() => {
     if (result) {
-      // Animate match percentage
       if (percentageRef.current) {
         gsap.fromTo(
           percentageRef.current,
@@ -80,12 +78,10 @@ const ResultDisplay = ({ result, error }) => {
         );
       }
 
-      // Fade-in verdict
       if (verdictRef.current) {
         gsap.fromTo(verdictRef.current, { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 1 });
       }
 
-      // Animate progress bar width
       if (progressBarRef.current) {
         gsap.fromTo(progressBarRef.current, { width: "0%" }, { width: `${result.match_percentage}%`, duration: 1.5, ease: "power1.out" });
       }
@@ -110,7 +106,6 @@ const ResultDisplay = ({ result, error }) => {
             <span ref={percentageRef} className="font-semibold">{result.match_percentage}%</span>
           </p>
 
-          {/* Progress bar */}
           <div className="w-full h-3 bg-gray-700 rounded-full mb-4">
             <div ref={progressBarRef} className="h-full bg-indigo-500 rounded-full"></div>
           </div>
@@ -132,7 +127,7 @@ const ResultDisplay = ({ result, error }) => {
   );
 };
 
-// Main Component
+// Main MatcherForm Component
 export default function MatcherForm() {
   const [step, setStep] = useState(1);
   const [resumeFile, setResumeFile] = useState(null);
@@ -160,27 +155,29 @@ export default function MatcherForm() {
       return;
     }
     setError("");
+    setLoading(true);
 
     const formData = new FormData();
     formData.append("resume", resumeFile);
     formData.append("job_description", jobDescription);
 
-    setLoading(true);
     try {
-      const response = await axios.post("https://resume-jdmatcher-latest.onrender.com/match", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await axios.post(
+        "https://resume-jdmatcher-latest.onrender.com/match", // fixed endpoint
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
       setResult(response.data);
-      setStep(3); // Move to result step on success
-    } catch (error) {
-      console.error("Error matching resume:", error);
-      if (error.response && error.response.data && error.response.data.detail) {
-        setError(error.response.data.detail);
+      setStep(3);
+    } catch (err) {
+      console.error("Error matching resume:", err);
+      if (err.response && err.response.data && err.response.data.detail) {
+        setError(err.response.data.detail);
       } else {
         setError("An error occurred while processing.");
       }
       setResult(null);
-      setStep(3); 
+      setStep(3);
     } finally {
       setLoading(false);
     }
@@ -196,11 +193,9 @@ export default function MatcherForm() {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white/15 backdrop-blur-lg shadow-2xl rounded-2xl p-10 w-full max-w-lg text-center border border-white/30 relative"
       >
-        <button>
-          <Link to="/" className="text-gray-300 hover:text-white absolute top-4 left-4">
-            ← Back to Home
-          </Link>
-        </button>
+        <Link to="/" className="text-gray-300 hover:text-white absolute top-4 left-4">
+          ← Back to Home
+        </Link>
         <h1 className="text-3xl font-extrabold text-white drop-shadow-lg mb-6">
           Resume & JD Matcher
         </h1>

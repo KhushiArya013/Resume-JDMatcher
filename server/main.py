@@ -12,32 +12,29 @@ from pydantic import BaseModel
 from pypdf.errors import PdfStreamError
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
 app = FastAPI()
 
-# Allow your Vite dev server(s) to call the API
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://resume-jd-matcher.vercel.app",  # your frontend deployed link
-        "http://localhost:5173",                  # optional for local testing
+        "https://resume-jd-matcher.vercel.app/",
+        "http://localhost:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
 api_key = os.environ.get("GEMINI_API_KEY")
 if not api_key:
     raise RuntimeError("GEMINI_API_KEY not found in environment variables.")
 
-# Initialize the LLM
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, api_key=api_key)
 
-# Prompt template for resume matching
 prompt_template = """
 You are an expert resume screening bot.
 Your task is to analyze a candidate's resume and determine the match percentage with the provided job description.
@@ -52,31 +49,21 @@ Job Description:
 Format your response as a JSON object with the following keys:
 - match_percentage: (e.g., 85.5)
 - verdict: (e.g., "Good match")
-- analysis: (e.g., "Candidate's skills in Python, FastAPI, and data analysis align well with the job requirements. Experience with REST APIs is a strong match.")
+- analysis: (e.g., "Candidate's skills in Python, FastAPI, and data analysis align well with the job requirements.")
 """
 llm_chain = PromptTemplate.from_template(prompt_template) | llm
-
 
 class MatchResult(BaseModel):
     match_percentage: float
     verdict: str
     analysis: str
 
-class RefineJDRequest(BaseModel):
-    job_description: str
-
-class GenerateCoverLetterRequest(BaseModel):
-    job_description: str
-
-
 async def extract_text_from_pdf(pdf_bytes: bytes) -> str:
-    """Extracts text from PDF bytes using LangChain's PyPDFLoader."""
     with io.BytesIO(pdf_bytes) as pdf_buffer:
         temp_file_path = "temp_resume.pdf"
         try:
             with open(temp_file_path, "wb") as temp_file:
                 temp_file.write(pdf_buffer.read())
-
             loader = PyPDFLoader(temp_file_path, extraction_kwargs={"strict": False})
             pages = loader.load_and_split()
             return " ".join([page.page_content for page in pages])
@@ -87,7 +74,6 @@ async def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         finally:
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
-
 
 @app.get("/")
 def health():
@@ -118,67 +104,6 @@ async def match_resume_with_llm(resume: UploadFile = File(...), job_description:
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail=f"LLM response could not be parsed: {llm_response.content}")
 
-@app.post("/refine-jd")
-async def refine_jd(request: RefineJDRequest):
-    if not request.job_description:
-        raise HTTPException(status_code=400, detail="Job description is empty.")
-
-    refine_prompt = PromptTemplate.from_template("""
-    You are a professional job description rewriter.
-    Refine the following job description to be more clear, concise, and professional.
-
-    Raw Job Description:
-    {job_description}
-
-    Refined Job Description:
-    """)
-    llm_refine_chain = refine_prompt | llm
-    llm_response = await llm_refine_chain.ainvoke({"job_description": request.job_description})
-    return {"refined_jd": llm_response.content}
-
-@app.post("/generate-cover-letter")
-async def generate_cover_letter(request: GenerateCoverLetterRequest):
-    if not request.job_description:
-        raise HTTPException(status_code=400, detail="Job description is empty.")
-
-    cover_letter_prompt = PromptTemplate.from_template("""
-    You are a professional cover letter writer.
-    Generate a persuasive cover letter based on the following job description.
-
-    Job Description:
-    {job_description}
-
-    Generated Cover Letter:
-    """)
-    llm_cover_letter_chain = cover_letter_prompt | llm
-    llm_response = await llm_cover_letter_chain.ainvoke({"job_description": request.job_description})
-    return {"cover_letter": llm_response.content}
-
-@app.post("/improve-resume")
-async def improve_resume(resume: UploadFile = File(...), job_description: str = Form(...)):
-    if not resume.filename or not job_description:
-        raise HTTPException(status_code=400, detail="Resume file and job description are required.")
-
-    file_bytes = await resume.read()
-    resume_text = await extract_text_from_pdf(file_bytes)
-
-    improve_prompt = PromptTemplate.from_template("""
-    You are a professional resume improvement assistant.
-    Analyze a candidate's resume and job description, and provide actionable recommendations.
-
-    Resume:
-    {resume_text}
-
-    Job Description:
-    {job_description}
-
-    Provide your analysis in a clear, easy-to-read format.
-    """)
-    llm_improve_chain = improve_prompt | llm
-    llm_response = await llm_improve_chain.ainvoke({"resume_text": resume_text, "job_description": job_description})
-    return {"analysis": llm_response.content}
-
-
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))  # Render sets the PORT automatically
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
