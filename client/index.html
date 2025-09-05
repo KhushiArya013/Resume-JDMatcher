@@ -1,10 +1,29 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!-- Google API for OAuth and Picker -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://www.gstatic.com/picker/hosted/picker.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
     <meta charset="UTF-8" />
+
+    <!-- ✅ Expanded CSP -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://www.gstatic.com https://accounts.google.com;
+        style-src 'self' 'unsafe-inline';
+        frame-src 'self' https://accounts.google.com https://drive.google.com https://docs.google.com;
+        img-src 'self' https://images.unsplash.com data:;
+        connect-src 'self' https://accounts.google.com https://www.googleapis.com;
+      "
+    />
+
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React</title>
+    <title>Resume Matcher</title>
   </head>
   <body>
     <div id="root"></div>
