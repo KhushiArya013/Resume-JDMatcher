@@ -8,22 +8,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel
-from pypdf.errors import PdfStreamError
-from dotenv import load_dotenv
 from PyPDF2 import PdfReader
+from dotenv import load_dotenv
+from typing import Optional # Import Optional
+
+# Google Drive OAuth
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 
 # Load environment variables
 load_dotenv()
 
-# FastAPI app
+# -------------------- FastAPI Setup --------------------
 app = FastAPI()
 
-# CORS
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://resume-jd-matcher.vercel.app",
 ]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -32,15 +37,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Keys
+# -------------------- Keys & LLM Setup --------------------
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
     raise RuntimeError("Required GEMINI_API_KEY environment variable is missing.")
 
-# LLM setup
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, api_key=api_key)
 
-# Prompt templates
+# -------------------- Prompt Templates --------------------
 match_prompt_template = """
 You are an expert resume screening bot.
 Your task is to analyze a candidate's resume and determine the match percentage with the provided job description.
@@ -87,17 +91,18 @@ Provide your analysis in a JSON object with the following keys:
 - suggestions (string)
 """
 
-# LLM Chains
+# -------------------- LLM Chains --------------------
 llm_match_chain = PromptTemplate.from_template(match_prompt_template) | llm
 llm_refine_chain = PromptTemplate.from_template(refine_jd_prompt_template) | llm
 llm_improve_resume_chain = PromptTemplate.from_template(improve_resume_prompt_template) | llm
 
-# Pydantic Models
+# -------------------- Pydantic Models --------------------
 class MatchResult(BaseModel):
     match_percentage: int
     verdict: str
     analysis: str
     user_email: str
+    drive_link: Optional[str] = None # <-- Make drive_link optional
 
 class RefinedJDResult(BaseModel):
     refined_jd: str
@@ -107,7 +112,7 @@ class ImproveResumeResult(BaseModel):
     gaps: str
     suggestions: str
 
-# PDF text extraction
+# -------------------- PDF Extraction --------------------
 async def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     try:
         pdf_buffer = io.BytesIO(pdf_bytes)
@@ -119,7 +124,7 @@ async def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read the PDF. {str(e)}")
 
-# Helper function to parse and clean LLM response
+# -------------------- Helper Functions --------------------
 def parse_llm_json_response(response_text: str):
     match = re.search(r'```json\n(.*?)```', response_text, re.DOTALL)
     if match:
@@ -129,40 +134,64 @@ def parse_llm_json_response(response_text: str):
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="LLM returned an invalid JSON format.")
 
-# Health check
+# -------------------- Google Drive Download --------------------
+async def download_from_drive(file_id: str, token: str) -> bytes:
+    """
+    Download a file from the user's Google Drive using OAuth token.
+    """
+    try:
+        creds = Credentials(token)
+        service = build("drive", "v3", credentials=creds)
+        request = service.files().get_media(fileId=file_id)
+        file_bytes = io.BytesIO()
+        downloader = MediaIoBaseDownload(file_bytes, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        return file_bytes.getvalue()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Drive download failed: {str(e)}")
+
+# -------------------- Health Check --------------------
 @app.get("/")
 def health():
     return {"message": "FastAPI backend is running ✅"}
 
-# Dummy user for local testing
+# -------------------- Dummy User --------------------
 DUMMY_USER = {"email": "testuser@example.com"}
 
-# Resume match endpoint
+# -------------------- Match Resume --------------------
 @app.post("/match", response_model=MatchResult)
 async def match_resume(
     job_description: str = Form(...),
-    resume: UploadFile = File(...)
+    resume: UploadFile = File(None),
+    drive_file_id: str = Form(None),
+    token: str = Form(None),
 ):
-    try:
+    if resume:
         file_bytes = await resume.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {str(e)}")
+        drive_link = None  # Set drive_link to None for local uploads
+    elif drive_file_id and token:
+        file_bytes = await download_from_drive(drive_file_id, token)
+        drive_link = f"https://drive.google.com/file/d/{drive_file_id}/view"
+    else:
+        raise HTTPException(status_code=400, detail="Either upload a file or provide a Drive file ID with token.")
 
+    # Extract text for LLM
     resume_text = await extract_text_from_pdf(file_bytes)
     chain_input = {"resume_text": resume_text, "job_description": job_description}
     llm_response = await llm_match_chain.ainvoke(chain_input)
     response_data = parse_llm_json_response(llm_response.content)
 
-    # Add dummy user email
+    # Add dummy user email & Drive link
     response_data["user_email"] = DUMMY_USER["email"]
+    response_data["drive_link"] = drive_link
+
     return response_data
 
-# Refine job description endpoint
+# -------------------- Refine JD --------------------
 @app.post("/refine-jd", response_model=RefinedJDResult)
-async def refine_job_description(
-    job_description: str = Form(...),
-    goals: str = Form(None)
-):
+async def refine_job_description(job_description: str = Form(...), goals: str = Form(None)):
     if goals is None:
         goals = "Make it more professional, clear, and attractive to qualified candidates."
     chain_input = {"job_description": job_description, "goals": goals}
@@ -170,12 +199,9 @@ async def refine_job_description(
     response_data = parse_llm_json_response(llm_response.content)
     return response_data
 
-# Improve resume endpoint
+# -------------------- Improve Resume --------------------
 @app.post("/improve-resume", response_model=ImproveResumeResult)
-async def improve_resume(
-    job_description: str = Form(...),
-    resume: UploadFile = File(...)
-):
+async def improve_resume(job_description: str = Form(...), resume: UploadFile = File(...)):
     try:
         file_bytes = await resume.read()
     except Exception as e:
@@ -185,9 +211,9 @@ async def improve_resume(
     chain_input = {"resume_text": resume_text, "job_description": job_description}
     llm_response = await llm_improve_resume_chain.ainvoke(chain_input)
     response_data = parse_llm_json_response(llm_response.content)
-
     return response_data
 
+# -------------------- Run Server --------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

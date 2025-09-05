@@ -1,12 +1,15 @@
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { gsap } from "gsap";
+import { useGoogleLogin } from "@react-oauth/google";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = "/api";
+
 
 export default function MatcherForm() {
   const [resumeFile, setResumeFile] = useState(null);
   const [resumeName, setResumeName] = useState("");
+  const [driveFileId, setDriveFileId] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -16,18 +19,80 @@ export default function MatcherForm() {
   const verdictRef = useRef(null);
   const progressBarRef = useRef(null);
 
+  const [accessToken, setAccessToken] = useState(null);
+
+  // New Google Login Hook for Access Token
+  const googleLogin = useGoogleLogin({
+    onSuccess: (codeResponse) => {
+      setAccessToken(codeResponse.access_token);
+    },
+    onError: (errorResponse) => {
+      console.error(errorResponse);
+      setError("Failed to get Google access token. Please log in again.");
+    },
+    scope: "https://www.googleapis.com/auth/drive.readonly",
+  });
+
+  // Load Google Picker API (GIS compatible)
+  useEffect(() => {
+    // Check if the script has already been added to prevent duplicates
+    if (!document.getElementById('google-picker-api-script')) {
+      const script = document.createElement("script");
+      script.id = 'google-picker-api-script';
+      script.src = "https://apis.google.com/js/api.js";
+      script.onload = () => {
+        window.gapi.load("picker", () => {
+          console.log("Google Picker API loaded");
+        });
+      };
+      document.body.appendChild(script);
+    }
+  }, []);
+
+  // File Handlers
   const handleFileSelect = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files[0]; // Correctly get the file object
     if (file) {
       setResumeFile(file);
       setResumeName(file.name);
+      setDriveFileId(""); // reset Drive selection
     }
   };
 
+  const handleDriveClick = () => {
+    if (!accessToken) {
+      alert("Please log in with Google to use Drive.");
+      googleLogin(); // Trigger Google login to get an access token
+      return;
+    }
+
+    const view = new window.google.picker.DocsView()
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(false)
+      .setMimeTypes("application/pdf");
+
+    const picker = new window.google.picker.PickerBuilder()
+      .setOAuthToken(accessToken)
+      .addView(view)
+      .setCallback((data) => {
+        if (data.action === window.google.picker.Action.PICKED) {
+          const file = data.docs[0]; // Correctly get the selected file
+          setDriveFileId(file.id);
+          setResumeName(file.name);
+          setResumeFile(null);
+        }
+      })
+      .build();
+
+    picker.setVisible(true);
+  };
+
+  // Submit Handler
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!resumeFile || !jobDescription) {
-      setError("Please select a resume and enter a job description.");
+
+    if (!jobDescription || (!resumeFile && !driveFileId)) {
+      setError("Please provide a job description and either upload a resume or select from Drive.");
       return;
     }
 
@@ -36,19 +101,26 @@ export default function MatcherForm() {
     setResult(null);
 
     const formData = new FormData();
-    formData.append("resume", resumeFile);
     formData.append("job_description", jobDescription);
+
+    if (resumeFile) {
+      formData.append("resume", resumeFile);
+    } else if (driveFileId) {
+      formData.append("drive_file_id", driveFileId);
+      formData.append("token", accessToken); // Ensure backend accepts 'token'
+    }
 
     try {
       const response = await axios.post(`${API_URL}/match`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
+        headers: {
+          // No need to set Content-Type for FormData, axios does it automatically
+          // for multipart/form-data with the correct boundary
+        },
       });
 
       const data = response.data;
-
-      // Ensure fields are strings and trim long text for display
-      data.analysis = data.analysis ? data.analysis.toString().trim() : "No details provided.";
-      data.verdict = data.verdict ? data.verdict.toString().trim() : "No verdict";
+      data.analysis = data.analysis?.trim() || "No details provided.";
+      data.verdict = data.verdict?.trim() || "No verdict";
       data.match_percentage = data.match_percentage || 0;
 
       setResult(data);
@@ -60,6 +132,7 @@ export default function MatcherForm() {
     }
   };
 
+  // Animations
   useEffect(() => {
     if (result) {
       gsap.fromTo(
@@ -77,11 +150,23 @@ export default function MatcherForm() {
       <h1>Resume Matcher</h1>
 
       <div className="space-y-6">
+        {/* Local Upload */}
         <div>
           <label>Upload Resume (PDF)</label>
           <input type="file" accept="application/pdf" onChange={handleFileSelect} />
+          {resumeName && <p>Selected file: {resumeName}</p>}
         </div>
 
+        {/* Google Drive Selection */}
+        <div>
+          <label>Select from Google Drive</label>
+          <button type="button" onClick={handleDriveClick}>
+            Pick from Drive
+          </button>
+          {driveFileId && <p>Selected Drive File: {resumeName}</p>}
+        </div>
+
+        {/* Job Description */}
         <div>
           <label>Job Description</label>
           <textarea
@@ -92,35 +177,27 @@ export default function MatcherForm() {
           />
         </div>
 
+        {/* Submit */}
         <button onClick={handleSubmit} disabled={loading}>
           {loading ? "Matching..." : "Match Resume"}
         </button>
 
         {error && <p className="text-red-300">{error}</p>}
 
+        {/* Result */}
         {result && (
           <div className="result-box animate-fade-in">
             <h2>Match Result</h2>
             <p>
-              <strong>Percentage:</strong>{" "}
-              <span ref={percentageRef}>{result.match_percentage}</span>%
+              <strong>Percentage:</strong> <span ref={percentageRef}>{result.match_percentage}</span>%
             </p>
             <p>
-              <strong>Verdict:</strong>{" "}
-              <span ref={verdictRef}>{result.verdict}</span>
+              <strong>Verdict:</strong> <span ref={verdictRef}>{result.verdict}</span>
             </p>
             <p style={{ marginTop: "1rem" }}>
               <strong>Analysis:</strong>
               <br />
-              {result.analysis
-                .split("\n")
-                .slice(0, 5)
-                .map((line, idx) => (
-                  <span key={idx}>
-                    {line}
-                    <br />
-                  </span>
-                ))}
+              {result.analysis}
             </p>
           </div>
         )}
