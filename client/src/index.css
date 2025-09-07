@@ -222,6 +222,14 @@ button:disabled {
 .animate-fade-in {
   animation: fadeIn 0.8s ease-in-out forwards;
 }
+/* index.css */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+/* Apply font globally */
+body {
+  font-family: 'Poppins', sans-serif;
+}
+
 
 /* Fonts (requires importing in index.html) */
 /*

@@ -3,12 +3,12 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { GoogleLogin } from "@react-oauth/google";
 import { jwtDecode } from "jwt-decode";
+import DashboardCard from "./DashboardCard";
 
 export default function HomePage() {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    // Check if user info exists in localStorage (persist login)
     const storedUser = localStorage.getItem("googleUser");
     if (storedUser) {
       setUser(JSON.parse(storedUser));
@@ -19,7 +19,7 @@ export default function HomePage() {
     const decoded = jwtDecode(credentialResponse.credential);
     const userData = { ...decoded, token: credentialResponse.credential };
     setUser(userData);
-    localStorage.setItem("googleUser", JSON.stringify(userData)); // persist user
+    localStorage.setItem("googleUser", JSON.stringify(userData));
   };
 
   const handleGoogleFailure = () => {
@@ -55,82 +55,61 @@ export default function HomePage() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="bg-white/15 backdrop-blur-lg shadow-2xl rounded-2xl p-10 w-full max-w-lg text-center border border-white/30 text-white"
+        className="bg-white/15 backdrop-blur-lg shadow-2xl rounded-2xl p-10 w-full max-w-4xl text-center border border-white/30 text-white flex flex-col justify-between items-center min-h-[90vh]"
       >
         {/* Google Login / Logout */}
-        {!user ? (
-          <motion.div variants={itemVariants} className="mb-6">
-            <GoogleLogin onSuccess={handleGoogleSuccess} onError={handleGoogleFailure} />
-          </motion.div>
-        ) : (
-          <motion.div variants={itemVariants} className="mb-6 space-y-2">
-            <p className="text-white font-semibold">Logged in as: {user.name || user.email}</p>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-500 rounded-lg hover:bg-red-600 transition"
-            >
-              Logout
-            </button>
-          </motion.div>
-        )}
-
-        <motion.h1 variants={itemVariants} className="text-7xl font-extrabold drop-shadow-lg mb-6">
-          Verity-Flow
-        </motion.h1>
-
-        <motion.p variants={itemVariants} className="text-xl mb-120">
-          Resume-JobDescription Matcher.
-        </motion.p>
-        <motion.p variants={itemVariants} className="text-xl mb-10">
-          AI-powered toolkit for career success.
-        </motion.p>
-
-        {/* Action Buttons */}
-        <motion.div variants={containerVariants} className="space-y-4">
-          <motion.div variants={itemVariants}>
-            <button disabled={!user}>
-              <Link
-                to={user ? "/resume-matcher" : "#"}
-                className={`w-full py-3 px-6 rounded-lg ${
-                  user
-                    ? "bg-yellow-400 hover:bg-yellow-500 text-gray-900"
-                    : "bg-gray-400 cursor-not-allowed text-gray-200"
-                } font-bold transition duration-300 inline-block shadow-lg hover:shadow-xl transform hover:scale-105`}
+        <div className="flex-shrink-0">
+          {!user ? (
+            <motion.div variants={itemVariants} className="mb-6">
+              <GoogleLogin onSuccess={handleGoogleSuccess} onError={handleGoogleFailure} />
+            </motion.div>
+          ) : (
+            <motion.div variants={itemVariants} className="mb-6 space-y-2">
+              <p className="text-white font-semibold">Logged in as: {user.name || user.email}</p>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-500 rounded-lg hover:bg-red-600 transition"
               >
-                Match My Resume
-              </Link>
-            </button>
-          </motion.div>
+                Logout
+              </button>
+            </motion.div>
+          )}
+        </div>
 
-          <motion.div variants={itemVariants}>
-            <button disabled={!user}>
-              <Link
-                to={user ? "/refine-jd" : "#"}
-                className={`w-full py-3 px-6 rounded-lg ${
-                  user
-                    ? "bg-gray-600 hover:bg-gray-700 text-white"
-                    : "bg-gray-400 cursor-not-allowed text-gray-200"
-                } font-semibold transition duration-300 inline-block shadow-lg hover:shadow-xl transform hover:scale-105`}
-              >
-                Refine Job Description
-              </Link>
-            </button>
-          </motion.div>
+        {/* Main Content */}
+        <div className="flex-grow flex flex-col items-center justify-center">
+          <motion.h1 variants={itemVariants} className="text-7xl font-extrabold drop-shadow-lg mb-6">
+            Verity-Flow
+          </motion.h1>
 
-          <motion.div variants={itemVariants}>
-            <button disabled={!user}>
-              <Link
-                to={user ? "/improve-resume" : "#"}
-                className={`w-full py-3 px-6 rounded-lg ${
-                  user
-                    ? "bg-gray-600 hover:bg-gray-700 text-white"
-                    : "bg-gray-400 cursor-not-allowed text-gray-200"
-                } font-semibold transition duration-300 inline-block shadow-lg hover:shadow-xl transform hover:scale-105`}
-              >
-                Improve My Resume
-              </Link>
-            </button>
-          </motion.div>
+          <motion.p variants={itemVariants} className="text-xl mb-4">
+            AI-powered toolkit for career success.
+          </motion.p>
+        </div>
+
+        {/* Dashboard Cards Grid */}
+        <motion.div variants={containerVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-auto flex-shrink-0">
+          <DashboardCard
+            title="Match My Resume"
+            description="Find the perfect fit for your skills."
+            link={user ? "/resume-matcher" : "#"}
+            buttonText="Match My Resume"
+            disabled={!user}
+          />
+          <DashboardCard
+            title="Refine Job Description"
+            description="Enhance job postings for clarity and appeal."
+            link={user ? "/refine-jd" : "#"}
+            buttonText="Refine Job Description"
+            disabled={!user}
+          />
+          <DashboardCard
+            title="Improve My Resume"
+            description="Get AI feedback to stand out from the crowd."
+            link={user ? "/improve-resume" : "#"}
+            buttonText="Improve My Resume"
+            disabled={!user}
+          />
         </motion.div>
       </motion.div>
     </motion.div>

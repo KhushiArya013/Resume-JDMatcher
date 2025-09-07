@@ -10,7 +10,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel
 from PyPDF2 import PdfReader
 from dotenv import load_dotenv
-from typing import Optional # Import Optional
+from typing import Optional
 
 # Google Drive OAuth
 from google.oauth2.credentials import Credentials
@@ -78,6 +78,7 @@ improve_resume_prompt_template = """
 You are an expert career coach and resume writer.
 Your task is to analyze a resume against a job description and provide actionable advice to improve the resume.
 Highlight the resume's strengths, identify key gaps, and suggest specific improvements tailored to the target job description.
+Also, calculate an estimated match percentage (0–100) that reflects how well the resume aligns with the job description.
 
 Resume:
 {resume_text}
@@ -89,6 +90,7 @@ Provide your analysis in a JSON object with the following keys:
 - strengths (string)
 - gaps (string)
 - suggestions (string)
+- match_percentage (int)
 """
 
 # -------------------- LLM Chains --------------------
@@ -102,7 +104,7 @@ class MatchResult(BaseModel):
     verdict: str
     analysis: str
     user_email: str
-    drive_link: Optional[str] = None # <-- Make drive_link optional
+    drive_link: Optional[str] = None
 
 class RefinedJDResult(BaseModel):
     refined_jd: str
@@ -111,6 +113,7 @@ class ImproveResumeResult(BaseModel):
     strengths: str
     gaps: str
     suggestions: str
+    match_percentage: int   # added match percentage here ✅
 
 # -------------------- PDF Extraction --------------------
 async def extract_text_from_pdf(pdf_bytes: bytes) -> str:
@@ -136,9 +139,6 @@ def parse_llm_json_response(response_text: str):
 
 # -------------------- Google Drive Download --------------------
 async def download_from_drive(file_id: str, token: str) -> bytes:
-    """
-    Download a file from the user's Google Drive using OAuth token.
-    """
     try:
         creds = Credentials(token)
         service = build("drive", "v3", credentials=creds)
@@ -170,20 +170,18 @@ async def match_resume(
 ):
     if resume:
         file_bytes = await resume.read()
-        drive_link = None  # Set drive_link to None for local uploads
+        drive_link = None
     elif drive_file_id and token:
         file_bytes = await download_from_drive(drive_file_id, token)
         drive_link = f"https://drive.google.com/file/d/{drive_file_id}/view"
     else:
         raise HTTPException(status_code=400, detail="Either upload a file or provide a Drive file ID with token.")
 
-    # Extract text for LLM
     resume_text = await extract_text_from_pdf(file_bytes)
     chain_input = {"resume_text": resume_text, "job_description": job_description}
     llm_response = await llm_match_chain.ainvoke(chain_input)
     response_data = parse_llm_json_response(llm_response.content)
 
-    # Add dummy user email & Drive link
     response_data["user_email"] = DUMMY_USER["email"]
     response_data["drive_link"] = drive_link
 
@@ -201,16 +199,33 @@ async def refine_job_description(job_description: str = Form(...), goals: str = 
 
 # -------------------- Improve Resume --------------------
 @app.post("/improve-resume", response_model=ImproveResumeResult)
-async def improve_resume(job_description: str = Form(...), resume: UploadFile = File(...)):
-    try:
+async def improve_resume(
+    job_description: str = Form(...),
+    resume: UploadFile = File(None),
+    drive_file_id: str = Form(None),
+    token: str = Form(None),
+):
+    if resume:
         file_bytes = await resume.read()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {str(e)}")
+    elif drive_file_id and token:
+        file_bytes = await download_from_drive(drive_file_id, token)
+    else:
+        raise HTTPException(status_code=400, detail="Either upload a file or provide a Drive file ID with token.")
 
     resume_text = await extract_text_from_pdf(file_bytes)
     chain_input = {"resume_text": resume_text, "job_description": job_description}
     llm_response = await llm_improve_resume_chain.ainvoke(chain_input)
     response_data = parse_llm_json_response(llm_response.content)
+
+    # Ensure match_percentage is present and valid
+    if "match_percentage" not in response_data:
+        response_data["match_percentage"] = 0
+    else:
+        try:
+            response_data["match_percentage"] = int(response_data["match_percentage"])
+        except:
+            response_data["match_percentage"] = 0
+
     return response_data
 
 # -------------------- Run Server --------------------
