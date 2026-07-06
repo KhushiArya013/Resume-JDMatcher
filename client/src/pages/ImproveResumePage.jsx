@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { useGoogleLogin } from "@react-oauth/google";
 import { gsap } from "gsap";
 
-const API_URL = "/api";
+const API_URL = "http://localhost:8000/api";
 
 export default function ImproveResumePage() {
   const [resumeFile, setResumeFile] = useState(null);
@@ -114,12 +114,12 @@ export default function ImproveResumePage() {
       });
 
       const data = response.data;
-      setResult({
-        strengths: data.strengths || "No strengths provided.",
-        gaps: data.gaps || "No gaps provided.",
-        suggestions: data.suggestions || "No suggestions provided.",
-        match_percentage: data.match_percentage || 0,
-      });
+setResult({
+  match_percentage: data.overall_score || 0,
+  strengths: data.content_improvements?.join(", ") || "No strengths provided.",
+  gaps: data.missing_sections?.join(", ") || "No gaps provided.",
+  suggestions: data.action_plan || "No suggestions provided.",
+});
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.detail || "An error occurred.");

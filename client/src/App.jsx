@@ -2,10 +2,12 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 
+
 import MatcherForm from './components/MatcherForm.jsx';
 import HomePage from './pages/HomePage.jsx';
 import RefineJobDescriptionPage from './pages/RefineJobDescriptionPage.jsx';
 import ImproveResumePage from './pages/ImproveResumePage.jsx';
+import CoverLetterPage from "./pages/CoverLetterPage.jsx";
 
 import './index.css';
 
@@ -19,6 +21,7 @@ const AnimatedRoutes = () => {
         <Route path="/resume-matcher" element={<MatcherForm />} />
         <Route path="/refine-jd" element={<RefineJobDescriptionPage />} />
         <Route path="/improve-resume" element={<ImproveResumePage />} />
+        <Route path="/cover-letter" element={<CoverLetterPage />} />
       </Routes>
     </AnimatePresence>
   );

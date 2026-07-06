@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import axios from "axios";
 
-const API_URL = "/api";
+const API_URL = "http://localhost:8000/api";
+
 
 export default function RefineJobDescriptionPage() {
   const [jobDescription, setJobDescription] = useState("");

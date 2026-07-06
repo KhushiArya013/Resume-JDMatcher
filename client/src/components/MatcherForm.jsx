@@ -3,7 +3,7 @@ import axios from "axios";
 import { gsap } from "gsap";
 import { useGoogleLogin } from "@react-oauth/google";
 
-const API_URL = "/api";
+const API_URL = "http://localhost:8000/api";
 
 
 export default function MatcherForm() {
@@ -119,9 +119,17 @@ export default function MatcherForm() {
       });
 
       const data = response.data;
-      data.analysis = data.analysis?.trim() || "No details provided.";
-      data.verdict = data.verdict?.trim() || "No verdict";
+
+      // Map Groq backend response fields to frontend expected fields
       data.match_percentage = data.match_percentage || 0;
+      data.verdict = data.match_percentage >= 70 ? "Strong Match" : 
+                     data.match_percentage >= 40 ? "Moderate Match" : "Weak Match";
+      data.analysis = data.summary?.trim() || "No detailed analysis provided.";
+
+      // Store extra fields for display
+      data.strengths = data.strengths || [];
+      data.improvements = data.improvements || [];
+      data.missing_keywords = data.missing_keywords || [];
 
       setResult(data);
     } catch (err) {
@@ -132,16 +140,22 @@ export default function MatcherForm() {
     }
   };
 
-  // Animations
+  // Animations with null checks
   useEffect(() => {
     if (result) {
-      gsap.fromTo(
-        percentageRef.current,
-        { innerText: 0 },
-        { innerText: result.match_percentage, duration: 1.5, snap: { innerText: 1 } }
-      );
-      gsap.fromTo(verdictRef.current, { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 1 });
-      gsap.fromTo(progressBarRef.current, { width: "0%" }, { width: `${result.match_percentage}%`, duration: 1.5 });
+      if (percentageRef.current) {
+        gsap.fromTo(
+          percentageRef.current,
+          { innerText: 0 },
+          { innerText: result.match_percentage, duration: 1.5, snap: { innerText: 1 } }
+        );
+      }
+      if (verdictRef.current) {
+        gsap.fromTo(verdictRef.current, { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 1 });
+      }
+      if (progressBarRef.current) {
+        gsap.fromTo(progressBarRef.current, { width: "0%" }, { width: `${result.match_percentage}%`, duration: 1.5 });
+      }
     }
   }, [result]);
 
@@ -188,17 +202,52 @@ export default function MatcherForm() {
         {result && (
           <div className="result-box animate-fade-in">
             <h2>Match Result</h2>
+
+            {/* Progress bar */}
+            <div className="w-full bg-gray-700 rounded-full h-3 mt-2 mb-4">
+              <div
+                ref={progressBarRef}
+                className="bg-yellow-400 h-3 rounded-full"
+                style={{ width: "0%" }}
+              ></div>
+            </div>
+
             <p>
               <strong>Percentage:</strong> <span ref={percentageRef}>{result.match_percentage}</span>%
             </p>
             <p>
               <strong>Verdict:</strong> <span ref={verdictRef}>{result.verdict}</span>
             </p>
+
             <p style={{ marginTop: "1rem" }}>
-              <strong>Analysis:</strong>
+              <strong>Summary:</strong>
               <br />
               {result.analysis}
             </p>
+
+            {result.strengths.length > 0 && (
+              <p style={{ marginTop: "1rem" }}>
+                <strong>Strengths:</strong>
+                <br />
+                {result.strengths.join(", ")}
+              </p>
+            )}
+
+            {result.missing_keywords.length > 0 && (
+              <p style={{ marginTop: "1rem" }}>
+                <strong>Missing Keywords:</strong>
+                <br />
+                {result.missing_keywords.join(", ")}
+              </p>
+            )}
+
+            {result.improvements.length > 0 && (
+              <p style={{ marginTop: "1rem" }}>
+                <strong>Improvements:</strong>
+                <br />
+                {result.improvements.join(", ")}
+              </p>
+            )}
           </div>
         )}
       </div>

@@ -1,234 +1,313 @@
-import io
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from groq import Groq
 import os
-import uvicorn
+import io
 import json
 import re
-from fastapi import FastAPI, Form, HTTPException, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-from langchain.prompts import PromptTemplate
-from langchain_google_genai import ChatGoogleGenerativeAI
-from pydantic import BaseModel
-from PyPDF2 import PdfReader
-from dotenv import load_dotenv
 from typing import Optional
+from dotenv import load_dotenv
 
-# Google Drive OAuth
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+# Load .env from the same directory as this file
+dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+load_dotenv(dotenv_path)
 
-# Load environment variables
-load_dotenv()
+app = FastAPI(title="Verity-Flow API", version="1.0")
 
-# -------------------- FastAPI Setup --------------------
-app = FastAPI()
-
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://resume-jd-matcher.vercel.app",
-]
-
+# CORS for your Vite frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# -------------------- Keys & LLM Setup --------------------
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    raise RuntimeError("Required GEMINI_API_KEY environment variable is missing.")
+# Groq client setup
+groq_client = None
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if GROQ_API_KEY:
+    groq_client = Groq(api_key=GROQ_API_KEY)
+else:
+    print("WARNING: GROQ_API_KEY not found. Add it to server/.env")
 
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, api_key=api_key)
+def get_groq_client():
+    global groq_client
+    if groq_client is None:
+        key = os.getenv("GROQ_API_KEY")
+        if not key:
+            raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured. Add it to server/.env")
+        groq_client = Groq(api_key=key)
+    return groq_client
 
-# -------------------- Prompt Templates --------------------
-match_prompt_template = """
-You are an expert resume screening bot.
-Your task is to analyze a candidate's resume and determine the match percentage with the provided job description.
-Provide the match percentage, a simple verdict, and a list of key matching skills or qualifications.
-
-Resume:
-{resume_text}
-
-Job Description:
-{job_description}
-
-Format your response as a JSON object with the following keys:
-- match_percentage (int)
-- verdict (string)
-- analysis (string)
-"""
-
-refine_jd_prompt_template = """
-You are an expert at creating and refining job descriptions.
-Your task is to refine the provided job description to make it more professional, appealing, and effective for attracting candidates.
-Consider the following refinement goals: {goals}.
-
-Original Job Description:
-{job_description}
-
-Provide the refined job description in a JSON object with the following keys:
-- refined_jd (string)
-"""
-
-improve_resume_prompt_template = """
-You are an expert career coach and resume writer.
-Your task is to analyze a resume against a job description and provide actionable advice to improve the resume.
-Highlight the resume's strengths, identify key gaps, and suggest specific improvements tailored to the target job description.
-Also, calculate an estimated match percentage (0–100) that reflects how well the resume aligns with the job description.
-
-Resume:
-{resume_text}
-
-Job Description:
-{job_description}
-
-Provide your analysis in a JSON object with the following keys:
-- strengths (string)
-- gaps (string)
-- suggestions (string)
-- match_percentage (int)
-"""
-
-# -------------------- LLM Chains --------------------
-llm_match_chain = PromptTemplate.from_template(match_prompt_template) | llm
-llm_refine_chain = PromptTemplate.from_template(refine_jd_prompt_template) | llm
-llm_improve_resume_chain = PromptTemplate.from_template(improve_resume_prompt_template) | llm
-
-# -------------------- Pydantic Models --------------------
-class MatchResult(BaseModel):
-    match_percentage: int
-    verdict: str
-    analysis: str
-    user_email: str
-    drive_link: Optional[str] = None
-
-class RefinedJDResult(BaseModel):
-    refined_jd: str
-
-class ImproveResumeResult(BaseModel):
-    strengths: str
-    gaps: str
-    suggestions: str
-    match_percentage: int   # added match percentage here ✅
-
-# -------------------- PDF Extraction --------------------
-async def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+def extract_text_from_pdf(file_bytes):
     try:
-        pdf_buffer = io.BytesIO(pdf_bytes)
-        reader = PdfReader(pdf_buffer)
+        import PyPDF2
+        reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
         text = ""
         for page in reader.pages:
-            text += page.extract_text() or ""
-        return text
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+        return text.strip()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to read the PDF. {str(e)}")
+        raise HTTPException(status_code=400, detail=f"PDF parsing error: {str(e)}")
 
-# -------------------- Helper Functions --------------------
-def parse_llm_json_response(response_text: str):
-    match = re.search(r'```json\n(.*?)```', response_text, re.DOTALL)
-    if match:
-        response_text = match.group(1)
+def extract_text_from_docx(file_bytes):
     try:
-        return json.loads(response_text)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="LLM returned an invalid JSON format.")
-
-# -------------------- Google Drive Download --------------------
-async def download_from_drive(file_id: str, token: str) -> bytes:
-    try:
-        creds = Credentials(token)
-        service = build("drive", "v3", credentials=creds)
-        request = service.files().get_media(fileId=file_id)
-        file_bytes = io.BytesIO()
-        downloader = MediaIoBaseDownload(file_bytes, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-        return file_bytes.getvalue()
+        import docx
+        document = docx.Document(io.BytesIO(file_bytes))
+        text = "\n".join([para.text for para in document.paragraphs if para.text])
+        return text.strip()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Drive download failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"DOCX parsing error: {str(e)}")
 
-# -------------------- Health Check --------------------
-@app.get("/")
-def health():
-    return {"message": "FastAPI backend is running ✅"}
+def call_groq(prompt, model="llama-3.3-70b-versatile"):
+    """Call Groq API with the given prompt"""
+    client = get_groq_client()
+    try:
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "You are an expert ATS analyzer and technical recruiter. Respond only with the requested format."},
+                {"role": "user", "content": prompt}
+            ],
+            model=model,
+            temperature=0.3,
+            max_tokens=2048,
+        )
+        return chat_completion.choices[0].message.content
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Groq API error: {str(e)}")
 
-# -------------------- Dummy User --------------------
-DUMMY_USER = {"email": "testuser@example.com"}
+def safe_json_extract(text):
+    """Extract JSON from LLM response even if wrapped in markdown"""
+    patterns = [
+        r"```json\s*(\{.*?\})\s*```",
+        r"```\s*(\{.*?\})\s*```",
+        r"(\{.*?\})"
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except:
+                continue
+    return None
 
-# -------------------- Match Resume --------------------
-@app.post("/match", response_model=MatchResult)
-async def match_resume(
-    job_description: str = Form(...),
-    resume: UploadFile = File(None),
-    drive_file_id: str = Form(None),
-    token: str = Form(None),
+@app.post("/api/match")
+async def match_resume_jd(
+    resume: UploadFile = File(...),
+    job_description: str = Form(...)
 ):
-    if resume:
+    """Analyze resume against job description using Groq"""
+    try:
         file_bytes = await resume.read()
-        drive_link = None
-    elif drive_file_id and token:
-        file_bytes = await download_from_drive(drive_file_id, token)
-        drive_link = f"https://drive.google.com/file/d/{drive_file_id}/view"
-    else:
-        raise HTTPException(status_code=400, detail="Either upload a file or provide a Drive file ID with token.")
+        filename = resume.filename.lower()
 
-    resume_text = await extract_text_from_pdf(file_bytes)
-    chain_input = {"resume_text": resume_text, "job_description": job_description}
-    llm_response = await llm_match_chain.ainvoke(chain_input)
-    response_data = parse_llm_json_response(llm_response.content)
+        if filename.endswith('.pdf'):
+            resume_text = extract_text_from_pdf(file_bytes)
+        elif filename.endswith('.docx') or filename.endswith('.doc'):
+            resume_text = extract_text_from_docx(file_bytes)
+        elif filename.endswith('.txt'):
+            resume_text = file_bytes.decode('utf-8')
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format. Use PDF, DOCX, or TXT")
 
-    response_data["user_email"] = DUMMY_USER["email"]
-    response_data["drive_link"] = drive_link
+        if not resume_text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text from resume")
 
-    return response_data
+        resume_text = resume_text[:5000]
+        job_description = job_description[:3000]
 
-# -------------------- Refine JD --------------------
-@app.post("/refine-jd", response_model=RefinedJDResult)
-async def refine_job_description(job_description: str = Form(...), goals: str = Form(None)):
-    if goals is None:
-        goals = "Make it more professional, clear, and attractive to qualified candidates."
-    chain_input = {"job_description": job_description, "goals": goals}
-    llm_response = await llm_refine_chain.ainvoke(chain_input)
-    response_data = parse_llm_json_response(llm_response.content)
-    return response_data
+        prompt = f"""Analyze how well the resume matches the job description.
 
-# -------------------- Improve Resume --------------------
-@app.post("/improve-resume", response_model=ImproveResumeResult)
+RESUME:
+{resume_text}
+
+JOB DESCRIPTION:
+{job_description}
+
+Respond ONLY with valid JSON in this exact format:
+{{
+    "match_percentage": <number 0-100>,
+    "missing_keywords": ["keyword1", "keyword2"],
+    "strengths": ["strength1", "strength2"],
+    "improvements": ["improvement1", "improvement2"],
+    "summary": "Brief 2-3 sentence assessment"
+}}
+
+Be honest and critical. If the match is poor, reflect that in the percentage."""
+
+        response_text = call_groq(prompt)
+        result = safe_json_extract(response_text)
+
+        if result is None:
+            result = {
+                "match_percentage": 50,
+                "missing_keywords": [],
+                "strengths": ["Analysis completed"],
+                "improvements": ["Could not structure detailed analysis"],
+                "summary": response_text[:300] if response_text else "Analysis completed but formatting failed."
+            }
+
+        return JSONResponse(content=result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.post("/api/refine-jd")
+async def refine_jd(job_description: str = Form(...)):
+    """Improve job description using Groq"""
+    try:
+        if not job_description.strip():
+            raise HTTPException(status_code=400, detail="Job description is empty")
+
+        prompt = f"""Improve this job description to be more clear, inclusive, and appealing to top engineering talent.
+Maintain all technical requirements but improve the language.
+
+ORIGINAL JOB DESCRIPTION:
+{job_description[:4000]}
+
+Return ONLY the refined job description text, no extra commentary."""
+
+        response_text = call_groq(prompt)
+        return {"refined_jd": response_text.strip()}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Refinement failed: {str(e)}")
+
+@app.post("/api/improve-resume")
 async def improve_resume(
-    job_description: str = Form(...),
-    resume: UploadFile = File(None),
-    drive_file_id: str = Form(None),
-    token: str = Form(None),
+    resume: UploadFile = File(...),
+    target_role: Optional[str] = Form(None)
 ):
-    if resume:
+    """Get AI feedback on resume using Groq"""
+    try:
         file_bytes = await resume.read()
-    elif drive_file_id and token:
-        file_bytes = await download_from_drive(drive_file_id, token)
-    else:
-        raise HTTPException(status_code=400, detail="Either upload a file or provide a Drive file ID with token.")
+        filename = resume.filename.lower()
 
-    resume_text = await extract_text_from_pdf(file_bytes)
-    chain_input = {"resume_text": resume_text, "job_description": job_description}
-    llm_response = await llm_improve_resume_chain.ainvoke(chain_input)
-    response_data = parse_llm_json_response(llm_response.content)
+        if filename.endswith('.pdf'):
+            resume_text = extract_text_from_pdf(file_bytes)
+        elif filename.endswith('.docx') or filename.endswith('.doc'):
+            resume_text = extract_text_from_docx(file_bytes)
+        elif filename.endswith('.txt'):
+            resume_text = file_bytes.decode('utf-8')
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format")
 
-    # Ensure match_percentage is present and valid
-    if "match_percentage" not in response_data:
-        response_data["match_percentage"] = 0
-    else:
-        try:
-            response_data["match_percentage"] = int(response_data["match_percentage"])
-        except:
-            response_data["match_percentage"] = 0
+        if not resume_text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text")
 
-    return response_data
+        resume_text = resume_text[:5000]
+        role_context = f" for {target_role}" if target_role else ""
 
-# -------------------- Run Server --------------------
+        prompt = f"""Review this resume{role_context} and provide specific, actionable improvements.
+
+RESUME:
+{resume_text}
+
+Respond ONLY with valid JSON:
+{{
+    "overall_score": <number 0-100>,
+    "formatting_issues": ["issue1"],
+    "content_improvements": ["improvement1"],
+    "missing_sections": ["section1"],
+    "action_plan": "Priority order of changes"
+}}
+
+Be specific. Reference actual content from the resume when giving feedback."""
+
+        response_text = call_groq(prompt)
+        result = safe_json_extract(response_text)
+
+        if result is None:
+            result = {
+                "overall_score": 70,
+                "formatting_issues": [],
+                "content_improvements": [response_text[:500]],
+                "missing_sections": [],
+                "action_plan": "Review the feedback above and implement changes."
+            }
+
+        return JSONResponse(content=result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Improvement analysis failed: {str(e)}")
+
+@app.post("/api/cover-letter")
+async def generate_cover_letter(
+    resume: UploadFile = File(...),
+    job_description: str = Form(...),
+    tone: str = Form("professional")
+):
+    """Generate a tailored cover letter using Groq"""
+    try:
+        file_bytes = await resume.read()
+        filename = resume.filename.lower()
+
+        if filename.endswith('.pdf'):
+            resume_text = extract_text_from_pdf(file_bytes)
+        elif filename.endswith('.docx') or filename.endswith('.doc'):
+            resume_text = extract_text_from_docx(file_bytes)
+        elif filename.endswith('.txt'):
+            resume_text = file_bytes.decode('utf-8')
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format. Use PDF, DOCX, or TXT")
+
+        if not resume_text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text from resume")
+
+        resume_text = resume_text[:4000]
+        job_description = job_description[:3000]
+
+        prompt = f"""Write a compelling, personalized cover letter based on this resume and job description.
+
+RESUME:
+{resume_text}
+
+JOB DESCRIPTION:
+{job_description}
+
+TONE: {tone}
+
+Guidelines:
+- Hook the reader in the first sentence
+- Connect 2-3 specific resume achievements to job requirements
+- Keep it under 300 words
+- End with a confident call to action
+- Do not use generic phrases like "I am writing to apply"
+- Reference specific company needs from the job description
+
+Return ONLY the cover letter text, no extra commentary."""
+
+        response_text = call_groq(prompt)
+
+        return {"cover_letter": response_text.strip()}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cover letter generation failed: {str(e)}")
+
+@app.get("/api/health")
+async def health_check():
+    key_status = "configured" if os.getenv("GROQ_API_KEY") else "missing"
+    return {
+        "status": "ok",
+        "service": "Verity-Flow API",
+        "groq_key": key_status,
+        "model": "llama-3.3-70b-versatile",
+        "endpoints": ["/api/match", "/api/refine-jd", "/api/improve-resume", "/api/cover-letter"]
+    }
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
