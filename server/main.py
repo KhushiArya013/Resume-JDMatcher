@@ -242,7 +242,7 @@ Be specific. Reference actual content from the resume when giving feedback."""
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Improvement analysis failed: {str(e)}")
 
-@app.post("/api/cover-letter")
+@app.post("/api/coverletter")
 async def generate_cover_letter(
     resume: UploadFile = File(...),
     job_description: str = Form(...),

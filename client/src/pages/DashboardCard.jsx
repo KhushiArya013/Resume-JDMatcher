@@ -1,4 +1,4 @@
-// src/components/DashboardCard.jsx
+/*// src/components/DashboardCard.jsx
 import React from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -40,4 +40,4 @@ export default function DashboardCard({ title, description, link, buttonText, di
       </div>
     </motion.div>
   );
-}
+}*/
